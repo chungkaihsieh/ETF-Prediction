@@ -7,11 +7,12 @@ from sklearn import preprocessing
 from sklearn.cross_validation import train_test_split
 import time 
 
-
+import keras
 from keras.models import Sequential
 from keras.layers.core import Dense, Dropout, Activation
 from keras.layers.recurrent import LSTM
-import keras
+from keras.utils import np_utils
+
 
 #macos matplot config
 import matplotlib
@@ -111,36 +112,6 @@ def data_helper(df, time_frame, train_interval, test_interval, day_offset):
 
 
 
-def build_model_close(input_length, input_dim):
-    d = 0.2
-    model = Sequential()
-    model.add(LSTM(128, input_shape=(input_length, input_dim), return_sequences=True))
-    model.add(Dropout(d))
-    model.add(LSTM(128, input_shape=(input_length, input_dim), return_sequences=False))
-    model.add(Dropout(d))
-    model.add(Dense(32,kernel_initializer="uniform",activation='linear'))
-    model.add(Dense(16,kernel_initializer="uniform",activation='linear'))
-    model.add(Dense(1,kernel_initializer="uniform",activation='sigmoid'))
-    model.compile(loss='mse',optimizer='adam', metrics=['accuracy'])
-    return model
-
-
-
-def build_model_ud(input_length, input_dim):
-    d = 0.2
-    model = Sequential()
-    model.add(LSTM(128, input_shape=(input_length, input_dim), return_sequences=True))
-    model.add(Dropout(d))
-    model.add(LSTM(128, input_shape=(input_length, input_dim), return_sequences=False))
-    model.add(Dropout(d))
-    model.add(Dense(32,kernel_initializer="uniform",activation='linear'))
-    model.add(Dense(16,kernel_initializer="uniform",activation='linear'))
-    model.add(Dense(1,kernel_initializer="uniform",activation='sigmoid'))
-    model.compile(loss='mse',optimizer='adam', metrics=['accuracy'])
-    return model
-
-
-
 
 def normalize(df):
 	newdf= df.copy()
@@ -174,7 +145,7 @@ def write_csv(x_test, pred_ud, pred_close, file_name):
 	pred_id = x_test[:,0][:,0][::5].astype(dtype=int)
 	pred_ud = pred_ud.flatten()
 	pred_close = pred_close.flatten()
-	
+
 	data = {'ETFid':pred_id, \
 			'Mon_ud':pred_ud[0::5], 'Mon_cprice':pred_close[0::5],\
 			'Tue_ud':pred_ud[1::5], 'Tue_cprice':pred_close[1::5],\
@@ -190,6 +161,37 @@ def write_csv(x_test, pred_ud, pred_close, file_name):
 
 
 
+def build_model_close(input_length, input_dim):
+    d = 0.2
+    model = Sequential()
+    model.add(LSTM(128, input_shape=(input_length, input_dim), return_sequences=True))
+    model.add(Dropout(d))
+    model.add(LSTM(128, input_shape=(input_length, input_dim), return_sequences=False))
+    model.add(Dropout(d))
+    model.add(Dense(32,kernel_initializer="uniform",activation='linear'))
+    model.add(Dense(16,kernel_initializer="uniform",activation='linear'))
+    model.add(Dense(1,kernel_initializer="uniform",activation='sigmoid'))
+    model.compile(loss='mse',optimizer='adam', metrics=['accuracy'])
+    return model
+
+
+
+def build_model_ud(input_length, input_dim):
+    d = 0.2
+    model = Sequential()
+    model.add(LSTM(128, input_shape=(input_length, input_dim), activation='sigmoid', inner_activation='hard_sigmoid', return_sequences=True))
+    model.add(Dropout(d))
+    model.add(LSTM(128, input_shape=(input_length, input_dim), activation='sigmoid', inner_activation='hard_sigmoid', return_sequences=False))
+    model.add(Dropout(d))
+    model.add(Dense(64,activation='relu'))
+    model.add(Dropout(d))
+    model.add(Dense(16,activation='relu'))
+    model.add(Dropout(d)) 
+    model.add(Dense(2, activation='softmax'))
+    model.compile(loss='binary_crossentropy',optimizer='adam', metrics=['accuracy'])
+    return model
+
+
 
 if __name__ == "__main__":
 	t_start = time.time()
@@ -203,7 +205,7 @@ if __name__ == "__main__":
 
 	# 以time_frame天為一區間進行股價預測(i.e 觀察10天股價, 預測第11天)
 	# 觀察1~5天 預測 5天(day_offset)後 (i.e 第11天) 的股價
-	time_frame = 15
+	time_frame = 10
 	day_offset = 5
 	#train_interval = [train_first_day,train_last_day] 
 	#(cautions): train_first_day - time_frame >= data first day
@@ -237,12 +239,20 @@ if __name__ == "__main__":
 	#------------------------#
 	#   ud value prediction  #
 	#------------------------#
+	# convert integers to dummy variables (i.e. one hot encoded)
+	y_train_ud[y_train_ud == -1] = 0 # turn stocks drop(-1) to value(0)
+	y_train_categorical_ud = np_utils.to_categorical(y_train_ud)
+
 	# time_frame days、6 dims
 	model_ud = build_model_ud( time_frame - day_offset, 7 )
-	model_ud.fit( x_train, y_train_ud, batch_size=32, epochs=10, validation_split=0.1, shuffle=True, verbose=1)
+	model_ud.fit( x_train, y_train_categorical_ud, batch_size=32, epochs=10, validation_split=0.1, shuffle=True, verbose=1)
 
 	# Use trained model to predict
-	pred_ud = model_ud.predict(x_test)
+	pred_categorical_ud = model_ud.predict(x_test)
+	#inverse value from to_categorical
+	pred_ud = np.argmax(pred_categorical_ud, axis= 1)
+	y_train_ud[y_train_ud == 0] = -1 # turn value(0) to stocks drop(-1)
+
 	# denormalize
 	denorm_pred_ud = denormalize('ud', stocks_df, pred_ud)
 	denorm_ytest_ud = denormalize('ud', stocks_df, y_test_ud)
@@ -251,7 +261,6 @@ if __name__ == "__main__":
 	#------------------------#
 	#      write to csv      #
 	#------------------------#
-	print('x_test.shape:{0}, pred_ud.shape:{1}, pred_close.shape:{2}'.format(x_test.shape, denorm_pred_ud.shape, denorm_pred_close.shape))
 	write_csv(x_test, denorm_pred_ud, denorm_pred_close, 'submission.csv')
 
 
