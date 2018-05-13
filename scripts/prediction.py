@@ -115,14 +115,14 @@ def data_helper(df, time_frame, train_interval, test_interval, day_offset):
 
 def normalize(df):
 	newdf= df.copy()
-	min_max_scaler = preprocessing.MinMaxScaler(feature_range=(0, 1), copy=True)
-	newdf['id'] = min_max_scaler.fit_transform(df.close.values.reshape(-1,1))
+	min_max_scaler = preprocessing.MinMaxScaler(feature_range=(-1, 1), copy=True)
+	newdf['id'] = min_max_scaler.fit_transform(df.id.values.reshape(-1,1))
 	newdf['open'] = min_max_scaler.fit_transform(df.open.values.reshape(-1,1))
 	newdf['low'] = min_max_scaler.fit_transform(df.low.values.reshape(-1,1))
 	newdf['high'] = min_max_scaler.fit_transform(df.high.values.reshape(-1,1))
 	newdf['volume'] = min_max_scaler.fit_transform(df.volume.values.reshape(-1,1))
 	newdf['close'] = min_max_scaler.fit_transform(df.close.values.reshape(-1,1))
-
+	newdf['ud'] = min_max_scaler.fit_transform(df.ud.values.reshape(-1,1))
 	return newdf
 
 
@@ -153,7 +153,10 @@ def write_csv(x_test, pred_ud, pred_close, file_name):
 			'Thu_ud':pred_ud[3::5], 'Thu_cprice':pred_close[3::5],\
 			'Fri_ud':pred_ud[4::5], 'Fri_cprice':pred_close[4::5]}
 
-	pred_df = pd.DataFrame(data=data, columns=['ETFid','Mon_ud', 'Mon_cprice','Tue_ud', 'Tue_cprice','Wed_ud', 'Wed_cprice','Thu_ud', 'Thu_cprice','Fri_ud', 'Fri_cprice'])
+	pred_df = pd.DataFrame(data=data, columns=['ETFid','Mon_ud', 'Mon_cprice',\
+												'Tue_ud', 'Tue_cprice','Wed_ud',\
+												'Wed_cprice','Thu_ud', 'Thu_cprice',\
+												'Fri_ud', 'Fri_cprice'])
 
 
 	#wrtie to csv
@@ -179,13 +182,13 @@ def build_model_close(input_length, input_dim):
 def build_model_ud(input_length, input_dim):
     d = 0.2
     model = Sequential()
-    model.add(LSTM(128, input_shape=(input_length, input_dim), activation='sigmoid', inner_activation='hard_sigmoid', return_sequences=True))
+    model.add(LSTM(32, input_shape=(input_length, input_dim), return_sequences=False))
     model.add(Dropout(d))
-    model.add(LSTM(128, input_shape=(input_length, input_dim), activation='sigmoid', inner_activation='hard_sigmoid', return_sequences=False))
+    # model.add(LSTM(32, input_shape=(input_length, input_dim), return_sequences=False))
     model.add(Dropout(d))
-    model.add(Dense(64,activation='relu'))
+    model.add(Dense(32,activation='relu'))
     model.add(Dropout(d))
-    model.add(Dense(16,activation='relu'))
+    model.add(Dense(8,activation='relu'))
     model.add(Dropout(d)) 
     model.add(Dense(2, activation='softmax'))
     model.compile(loss='binary_crossentropy',optimizer='adam', metrics=['accuracy'])
@@ -205,33 +208,33 @@ if __name__ == "__main__":
 
 	# 以time_frame天為一區間進行股價預測(i.e 觀察10天股價, 預測第11天)
 	# 觀察1~5天 預測 5天(day_offset)後 (i.e 第11天) 的股價
-	time_frame = 10
+	time_frame = 15
 	day_offset = 5
 	#train_interval = [train_first_day,train_last_day] 
 	#(cautions): train_first_day - time_frame >= data first day
 	# train_interval = ['20130201','20180504']
 	train_interval = ['20180101','20180427']
 	test_interval = ['20180430','20180504']
-	x_train, y_train_close, y_train_ud, x_test, y_test_close, y_test_ud = data_helper(stocks_df, time_frame, train_interval, test_interval, day_offset)
+	x_train, y_train_close, y_train_ud, x_test, y_test_close, y_test_ud = data_helper(stocks_df_normalize, time_frame, train_interval, test_interval, day_offset)
 
 	print('[data helper] costs:' + str(time.time() - t_start) + 'secs')
 	t_start = time.time()
 
 	# print(y_test_ud)
 
-	#------------------------#
-	# Close value prediction #
-	#------------------------#
+	# #------------------------#
+	# # Close value prediction #
+	# #------------------------#
 
-	# time_frame days、6 dims
-	model_close = build_model_close( time_frame - day_offset, 7 )
-	model_close.fit( x_train, y_train_close, batch_size=32, epochs=10, validation_split=0.1, shuffle=True, verbose=1)
+	# # time_frame days、6 dims
+	# model_close = build_model_close( time_frame - day_offset, 7 )
+	# model_close.fit( x_train, y_train_close, batch_size=32, epochs=10, validation_split=0.1, shuffle=True, verbose=1)
 
-	# Use trained model to predict
-	pred_close = model_close.predict(x_test)
-	# denormalize
-	denorm_pred_close = denormalize('close', stocks_df, pred_close)
-	denorm_ytest_close = denormalize('close', stocks_df, y_test_close)
+	# # Use trained model to predict
+	# pred_close = model_close.predict(x_test)
+	# # denormalize
+	# denorm_pred_close = denormalize('close', stocks_df, pred_close)
+	# denorm_ytest_close = denormalize('close', stocks_df, y_test_close)
 
 
 
@@ -240,12 +243,12 @@ if __name__ == "__main__":
 	#   ud value prediction  #
 	#------------------------#
 	# convert integers to dummy variables (i.e. one hot encoded)
-	y_train_ud[y_train_ud == -1] = 0 # turn stocks drop(-1) to value(0)
+	y_train_ud[y_train_ud == -1] = 0.0 # turn stocks drop(-1) to value(0)
 	y_train_categorical_ud = np_utils.to_categorical(y_train_ud)
-
+	print(y_train_categorical_ud)
 	# time_frame days、6 dims
 	model_ud = build_model_ud( time_frame - day_offset, 7 )
-	model_ud.fit( x_train, y_train_categorical_ud, batch_size=32, epochs=10, validation_split=0.1, shuffle=True, verbose=1)
+	model_ud.fit( x_train, y_train_categorical_ud, batch_size=32, epochs=500, validation_split=0.1, shuffle=False, verbose=1)
 
 	# Use trained model to predict
 	pred_categorical_ud = model_ud.predict(x_test)
@@ -258,10 +261,10 @@ if __name__ == "__main__":
 	denorm_ytest_ud = denormalize('ud', stocks_df, y_test_ud)
 
 
-	#------------------------#
-	#      write to csv      #
-	#------------------------#
-	write_csv(x_test, denorm_pred_ud, denorm_pred_close, 'submission.csv')
+	# #------------------------#
+	# #      write to csv      #
+	# #------------------------#
+	# write_csv(x_test, denorm_pred_ud, denorm_pred_close, 'submission.csv')
 
 
 	# #------------------------#
