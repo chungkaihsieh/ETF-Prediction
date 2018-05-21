@@ -1,10 +1,12 @@
-
 # -*- coding: utf-8 -*-
 import pandas as pd
 from pandas.tseries.offsets import *
 import numpy as np
+import itertools
+
 from sklearn import preprocessing
 from sklearn.model_selection import train_test_split
+from sklearn.metrics import confusion_matrix
 import time 
 
 import keras
@@ -59,7 +61,7 @@ def data_helper(df, time_frame, train_interval, test_interval, day_offset):
 	number_features = len(feature_cols)
 	# extract id
 	id_unique = df['id'].unique()
- 	# print('id_unique' + str(id_unique))
+
 
 	#--------------------------#
 	# Training data preprocess #
@@ -75,14 +77,14 @@ def data_helper(df, time_frame, train_interval, test_interval, day_offset):
 				#filter data by date time interval (BDay : business day)
 				df_partial = df[(df['date']>= train_end[i] - BDay(_time_frame) ) & (df['date']<= train_end[i]) & (df['id']== _id)]
 				if len(df_partial) >= time_frame+1:
-						train_result.append(df_partial[-(time_frame+1):].as_matrix(columns = feature_cols))
+						train_result.append(df_partial[-(time_frame):].as_matrix(columns = feature_cols))
 						break
 				_time_frame += 1
 				
 
 
 	train_result = np.array(train_result).astype(dtype='float32')
-	x_train = train_result[:,:-(day_offset)-1] #Extract every time_frame -(day_offset + last day) as feature
+	x_train = train_result[:,:-(day_offset)] #Extract every time_frame -(day_offset + last day) as feature
 	y_train_close = train_result[:,-1][:,-1] # Extract the last one time_frame close(收盤價) value as label
 	y_train_ud = train_result[:,-1][:,-2] # Extract the last one time_frame ud(收盤價漲跌) value as label
 
@@ -101,19 +103,21 @@ def data_helper(df, time_frame, train_interval, test_interval, day_offset):
 				#filter data by date time interval (BDay : business day)
 				df_partial = df[(df['date']>= test_end[i] - BDay(_time_frame) ) & (df['date']<= test_end[i]) & (df['id']== _id)]
 				if len(df_partial) >= time_frame+1:
-					test_result.append(df_partial[-(time_frame+1):].as_matrix(columns = feature_cols))
+					test_result.append(df_partial[-(time_frame):].as_matrix(columns = feature_cols))
 					break
 				_time_frame += 1
 
 
 	test_result = np.array(test_result).astype(dtype='float32')
-	x_test = test_result[:,:-(day_offset)-1] #Extract every time_frame -(day_offset + last day) as feature
+	x_test = test_result[:,:-(day_offset)] #Extract every time_frame -(day_offset + last day) as feature
 	y_test_close = test_result[:,-1][:,-1] # Extract the last one time_frame close(收盤價) value as label
 	y_test_ud = test_result[:,-1][:,-2] # Extract the last one time_frame ud(收盤價漲跌) value as label
 
 
-	# print('id_unique' + str(np.unique(x_train[:,0][:,0])))
+
 	return [x_train, y_train_close, y_train_ud, x_test, y_test_close, y_test_ud]
+
+
 
 
 
@@ -164,6 +168,40 @@ def write_csv(id, pred_ud, pred_close, file_name):
 	pred_df.to_csv(file_name, index=False)
 
 
+def plot_confusion_matrix(cm, classes,
+                          normalize=False,
+                          title='Confusion matrix',
+                          cmap=plt.cm.Blues):
+    """
+    This function prints and plots the confusion matrix.
+    Normalization can be applied by setting `normalize=True`.
+    """
+    if normalize:
+        cm = cm.astype('float') / cm.sum(axis=1)[:, np.newaxis]
+        print("Normalized confusion matrix")
+    else:
+        print('Confusion matrix, without normalization')
+
+    print(cm)
+
+    plt.imshow(cm, interpolation='nearest', cmap=cmap)
+    plt.title(title)
+    plt.colorbar()
+    tick_marks = np.arange(len(classes))
+    plt.xticks(tick_marks, classes, rotation=45)
+    plt.yticks(tick_marks, classes)
+
+    fmt = '.2f' if normalize else 'd'
+    thresh = cm.max() / 2.
+    for i, j in itertools.product(range(cm.shape[0]), range(cm.shape[1])):
+        plt.text(j, i, format(cm[i, j], fmt),
+                 horizontalalignment="center",
+                 color="white" if cm[i, j] > thresh else "black")
+
+    plt.tight_layout()
+    plt.ylabel('True label')
+    plt.xlabel('Predicted label')
+
 
 def build_model_close(input_length, input_dim):
     d = 0.2
@@ -213,65 +251,72 @@ def training(x_train, y_train_close, y_train_ud, x_test, y_test_close, y_test_ud
 
 
 
-	'''
-	# ------------------------#
-	#   ud value prediction   #
-	# ------------------------#
-	# convert integers to dummy variables (i.e. one hot encoded)
-	y_train_ud+= 1 # [drop, balance, up] turn [-1, 0, 1] to [0, 1, 2]
-	y_train_categorical_ud = np_utils.to_categorical(y_train_ud)
-
-	# sequence length(觀察的天數~= time_frame - day_offset) ; feature length (7 dims)
-	model_ud = build_model_ud( time_frame - day_offset, 7 )
-	earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=7)
-	model_ud.fit( x_train, y_train_categorical_ud, batch_size=16, epochs=1, validation_split=0.1, shuffle=True, verbose=1, callbacks=[earlyStopping])
-
-	# Use trained model to predict
-	pred_categorical_ud = model_ud.predict(x_test)
-	#inverse value from to_categorical
-	pred_ud = np.argmax(pred_categorical_ud, axis= 1)
-	pred_ud -= 1 # [drop, balance, up] turn [0, 1, 2] to [-1, 0, 1]
-	'''
-
-
 	# ------------------------#
 	#   ud value prediction   #
 	# ------------------------#
 	# 當天收盤價(使用所預測的股價直)減掉前一天收盤價
-	pred_ud = np.diff(denorm_ytest_close, axis = 0)
+	pred_ud = np.diff(denorm_pred_close, axis = 0)
 	pred_ud = np.where(pred_ud >= 0, np.where(pred_ud > 0, 1, 0), -1)
+
 
 	# 第一天收盤價需要與上禮拜最後一天收盤價比較
 	first_close_value = denorm_ytest_close[0,-1]-y_test_close[-1]
 	first_close_value = np.where(first_close_value>= 0, np.where(first_close_value > 0, 1, 0), -1)
 	pred_ud = np.insert(pred_ud, 0, first_close_value)
 
+
 	
 	#------------------------#
 	#      write to csv      #
 	#------------------------#
 	#儲存較好的submission.csv
-	evl = evaluation_function(denorm_pred_close, denorm_ytest_close, pred_ud, y_test_ud)/5
-	if evl > bset_evaluation:
+	evl = evaluation_function(denorm_pred_close, denorm_ytest_close, pred_ud, y_test_ud)
+	if evl >= bset_evaluation or bset_evaluation == 0:
 		denorm_id = denormalize('id', stocks_df, x_test[:,0][:,0][::5])
 		write_csv(denorm_id, pred_ud, denorm_pred_close, 'submission.csv')
 
-	'''
-	# ------------------------#
-	#         matplot        #
-	# ------------------------#
-	#matplotlib inline  
-	plt.plot(denorm_pred_close,color='red', label='Prediction')
-	plt.plot(denorm_ytest_close,color='blue', label='Answer')
-	plt.legend(loc='best')
-	plt.show()
+	# # ------------------------#
+	# #         matplot        #
+	# # ------------------------#
+	# #-- plot close value curve --#  
+	# pred_days = 5
+	# denorm_id = denormalize('id', stocks_df, x_test[:,0][:,0][::5])
+	# denorm_id = np.rint(denorm_id).astype(dtype=int).flatten()
 
-	#matplotlib inline  
-	plt.plot(pred_ud,color='red', label='Prediction')
-	plt.plot(y_test_ud,color='blue', label='Answer')
-	plt.legend(loc='best')
-	plt.show()
-	'''
+	# fig, axes = plt.subplots(3, 6, sharex='col', sharey='row')
+	# axes = np.array(axes).flatten()
+
+	# for i in range(len(denorm_pred_close)/5):
+	# 	axes[i].plot(denorm_pred_close[(i)*pred_days:(i+1)*pred_days],'ro-', markersize=2.5, color='maroon',label='pred')
+	# 	axes[i].plot(denorm_ytest_close[(i)*pred_days:(i+1)*pred_days],'ro-', markersize=2.5, color='cornflowerblue',label='label')
+	# 	axes[i].set_title('ID:' + str(denorm_id[i]), fontsize=8)
+
+	# 	#Change subplot edge color
+	# 	plt.setp(axes[i].spines.values(), color='dimgray')
+	# 	plt.setp([axes[i].get_xticklines(), axes[i].get_yticklines()], color='dimgray')
+	# # Creating legend and title for the figure. Legend created with figlegend(), title with suptitle()
+	# leg = fig.legend(('predict','label'),loc='upper right')
+
+	# # Create Title, xlabel and ylabel
+	# fig.suptitle('Close Value Prediction', fontsize=12, color='darkred')
+	# fig.text(0.5, 0.02, 'Business Days', ha='center',fontsize=15, color='gray')
+	# fig.text(0.04, 0.5, 'Close Value', va='center', rotation='vertical',fontsize=12, color='gray')
+
+
+	# #--plot confusion matrix about stocks up & down --#
+	# class_names = ['down','balance','up']
+	# # Compute confusion matrix
+	# cnf_matrix = confusion_matrix(y_test_ud, pred_ud)
+	# np.set_printoptions(precision=2)
+
+	# # Plot non-normalized confusion matrix
+	# plt.figure()
+	# plot_confusion_matrix(cnf_matrix, classes=class_names,
+	#                       title='Confusion matrix, without normalization')
+
+	# plt.show()
+
+
 	return evl
 
 
@@ -291,7 +336,17 @@ def evaluation_function(denorm_pred_close, denorm_ytest_close, pred_ud, y_test_u
 	# 漲跌
 	updown = np.array(np.where(pred_ud-y_test_ud==0,0.5,0))
 
-	return np.sum([value.flatten()+updown.flatten()])
+	#every score weights per day 
+	days_weights = np.array([0.1, 0.15, 0.2, 0.25, 0.3])
+	value = value.flatten()
+	updown = updown.flatten()
+
+	for i in range(5):
+		value[i::5] *= days_weights[i]
+		updown[i::5] *= days_weights[i]
+
+	return np.sum([value + updown])
+
 
 
 
@@ -299,7 +354,7 @@ def evaluation_function(denorm_pred_close, denorm_ytest_close, pred_ud, y_test_u
 if __name__ == "__main__":
 
 	t_start = time.time()
-	stocks_df = read_data('TBrain_Round2_DataSet_20180518/tetfp.csv', first_time=True)
+	stocks_df = read_data('../TBrain_Round2_DataSet_20180518/tetfp.csv', first_time=True)
 	print('[read_data] costs:' + str(time.time() - t_start) + 'secs')
 	t_start = time.time()
 	stocks_df_normalize = normalize(stocks_df)
@@ -308,7 +363,7 @@ if __name__ == "__main__":
 
 	# 以time_frame天為一區間進行股價預測(i.e 觀察10天股價, 預測第11天)
 	# 觀察1~10天(1 ~ time_feame-day_offset) 預測 5天(day_offset)後 (i.e 第16天) 的股價
-	time_frame = 15
+	time_frame = 10
 	day_offset = 5
 	#train_interval = [train_first_day,train_last_day] 
 	#(cautions): train_first_day - time_frame >= data first day
@@ -317,16 +372,20 @@ if __name__ == "__main__":
 	test_interval = ['20180514','20180518']
 	x_train, y_train_close, y_train_ud, x_test, y_test_close, y_test_ud = data_helper(stocks_df_normalize, time_frame, train_interval, test_interval, day_offset)
 
+
 	print('[data helper] costs:' + str(time.time() - t_start) + 'secs')
 	t_start = time.time()
 
 
-	batch = [8,10,16,20,32,50,64,100,128]
-	epoch = [30,50,75,80,100]
 
+	#-------------------#
+	#  Training  Part   #
+	#-------------------#
+	batch = [100]
+	epoch = [80]
 
 	acc = np.zeros((len(batch),len(epoch)))	
-	bset_evaluation = 0
+	bset_evaluation = 0.0
 
 	# 使用不同batch_size與epoch作訓練
 	for i in range(0,len(batch)):
@@ -337,7 +396,8 @@ if __name__ == "__main__":
 				bset_evaluation = evl
 	print(acc)
 
-	#wrtie to csv
+
+	#wrtie Accuracy to csv
 	acc = pd.DataFrame(data=acc)
 	acc.to_csv('evaluation.csv', index=False)
 
