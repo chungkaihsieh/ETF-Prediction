@@ -36,6 +36,13 @@ $ pip install -r requirements.txt
 
 
 ### Download
+**For Training**
+```bash
+$ bash download.sh
+```
+
+**Full Version**
+
 Please download the dataset from the competition website.
 
 [[Tbrain-Competion] - ETF Prediction](https://tbrain.trendmicro.com.tw/Competitions/Details/2)
