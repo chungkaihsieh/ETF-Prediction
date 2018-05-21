@@ -36,7 +36,7 @@ $ pip install -r requirements.txt
 
 
 ### Download
-[**For Training**]
+[**For Training**] download from private dropbox folder.
 ```bash
 $ bash download.sh
 ```
