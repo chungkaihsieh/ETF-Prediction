@@ -414,13 +414,13 @@ if __name__ == "__main__":
 	#(cautions): train_first_day - time_frame >= data first day
 
 
-	# #for testing
-	# train_interval = ['20180101','20180518']
-	# test_interval = ['20180521','20180525']
-
-	# for submission
+	#for testing
 	train_interval = ['20180101','20180601']
 	test_interval = ['20180604','20180608']
+
+	# # for submission
+	# train_interval = ['20180101','20180608']
+	# test_interval = ['20180611','20180615']
 
 
 
@@ -466,8 +466,8 @@ if __name__ == "__main__":
 	print('[data helper -ud ] costs:' + str(time.time() - t_start) + 'secs')
 	t_start = time.time()
 
-	voting_size_dnn = 4
-	voting_size_rf = 5
+	voting_size_dnn = 3
+	voting_size_rf = 2
 	voting_size = voting_size_dnn+voting_size_rf
 	pred_ud_all = []
 

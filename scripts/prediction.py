@@ -138,10 +138,13 @@ def data_helper_close(stocks_df, dji_df, time_frame, train_interval, test_interv
 def data_helper_ud(stocks_df, dji_df, time_frame, train_interval, test_interval):
 	# data dimensions: id, open(開盤價)、high(最高價)、low(最低價)、volume(成交量)、close(收盤價), 6 dims
 	# feature_cols = ['id','open','high','low','volume','ud','close']
-	stocks_feature_cols = ['open', 'high', 'low', 'volume', 'sma', 'rsi', 'slowk', 'slowd', 'fastk', 'fastd', \
-							'upper', 'middle', 'lower', 'macd', 'macdsignal', 'macdhist', 'roc', 'rocp', 'rocr100', \
-							'adx', 'adxr', 'apo', 'cmo', 'mom', 'ppo', 'trix', 'id', 'ud', 'close']
-	# stocks_feature_cols = ['open','high','low','volume','roc','rocr100','rsi','fastk','slowk','sma','upper','macd','macdsignal','macdhist','id','ud','close']
+	# stocks_feature_cols = ['open', 'high', 'low', 'volume', 'sma', 'rsi', 'slowk', 'slowd', 'fastk', 'fastd', \
+	# 						'upper', 'middle', 'lower', 'macd', 'macdsignal', 'macdhist', 'roc', 'rocp', 'rocr100', \
+	# 						'adx', 'adxr', 'apo', 'cmo', 'mom', 'ppo', 'trix', 'id', 'ud', 'close']
+	stocks_feature_cols = ['open','high','low','volume','roc','rocr100','rsi','fastk','slowk','sma','upper','macd','macdsignal','macdhist','id','ud','close']
+	# stocks_feature_cols = ['roc','rsi','fastk','slowk','sma','upper','macd','macdsignal','macdhist','id','ud','close']
+
+
 	dji_feature_cols = list(stocks_feature_cols)
 	dji_feature_cols.remove('id')
 
@@ -399,12 +402,12 @@ if __name__ == "__main__":
 
 
 	# # #for testing
-	train_interval = ['20180101','20180525']
-	test_interval = ['20180528','20180601']
+	train_interval = ['20180101','20180601']
+	test_interval = ['20180604','20180608']
 
 	#for submission
-	# train_interval = ['20180101','20180525']
-	# test_interval = ['20180528','20180601']
+	train_interval = ['20180101','20180608']
+	test_interval = ['20180611','20180615']
 
 
 
@@ -447,7 +450,6 @@ if __name__ == "__main__":
 	t_start = time.time()
 	time_frame = 5
 	x_train_ud, y_train_ud, x_test_ud, y_test_ud = data_helper_ud(stocks_df_normalize, dji_df_normalize, time_frame, train_interval, test_interval)
-	print('y_test_ud.shape->' + str(y_test_ud.shape))
 	print('[data helper -ud ] costs:' + str(time.time() - t_start) + 'secs')
 	t_start = time.time()
 
@@ -457,7 +459,7 @@ if __name__ == "__main__":
 	model_ud = build_model_ud( x_train_ud.shape[-1], y_train_ud.shape[-1] )
 	earlyStopping = keras.callbacks.EarlyStopping(monitor='val_loss', patience=5)
 	# model_ud.fit( x_train_ud[::-1], y_train_ud[::-1], batch_size=5, epochs=100, shuffle=False, verbose=1, callbacks=[earlyStopping])
-	model_ud.fit( x_train_ud, y_train_ud, batch_size=5, epochs=100,validation_split=0.1, shuffle=True, verbose=1, callbacks=[earlyStopping])
+	model_ud.fit( x_train_ud, y_train_ud, batch_size=100, epochs=80,validation_split=0.1, shuffle=True, verbose=1, callbacks=[earlyStopping])
 
 	# Use trained model to predict
 	pred_ud = model_ud.predict(x_test_ud)
@@ -524,4 +526,3 @@ if __name__ == "__main__":
 	                      title='Confusion matrix, without normalization')
 
 	# plt.show()
-

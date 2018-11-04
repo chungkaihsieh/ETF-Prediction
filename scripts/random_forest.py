@@ -79,6 +79,7 @@ if __name__ == "__main__":
 		for j in range(1,100):
 			for k in range(50,100):
 				for l in range(len(x_train)):
+					i,j,k = 6,11,59
 					forest = ensemble.RandomForestClassifier(n_estimators=i, random_state=42,max_features=j, min_samples_leaf=k)
 					multi_target_forest = MultiOutputClassifier(forest, n_jobs=-1)
 					multi_target_forest.fit(x_train[l], y_train[l])
