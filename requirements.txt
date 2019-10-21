@@ -42,6 +42,6 @@ tensorflow==1.8.0
 termcolor==1.1.0
 Theano==1.0.1
 urllib3==1.22
-Werkzeug==0.14.1
+Werkzeug==0.15.3
 yahoo-finance==1.4.0
 yarg==0.1.9
