@@ -20,7 +20,7 @@ kiwisolver==1.0.1
 Markdown==2.6.11
 matplotlib==2.2.2
 mock==2.0.0
-numpy==1.14.3
+numpy==1.22.0
 pandas==0.22.0
 pbr==4.0.2
 pipreqs==0.4.9
